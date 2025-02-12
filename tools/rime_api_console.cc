@@ -162,6 +162,29 @@ bool execute_special_command(const char* line, RimeSessionId session_id) {
     printf("%s set %s.\n", option, is_on ? "on" : "off");
     return true;
   }
+  if (!strcmp(line, "synchronize")) {
+    return rime->sync_user_data();
+  }
+  const char* kDeleteCandidateOnCurrentPage = "delete on current page ";
+  command_length = strlen(kDeleteCandidateOnCurrentPage);
+  if (!strncmp(line, kDeleteCandidateOnCurrentPage, command_length)) {
+    const char* index_str = line + command_length;
+    int index = atoi(index_str);
+    if (!rime->delete_candidate_on_current_page(session_id, index)) {
+      fprintf(stderr, "failed to delete\n");
+    }
+    return true;
+  }
+  const char* kDeleteCandidate = "delete ";
+  command_length = strlen(kDeleteCandidate);
+  if (!strncmp(line, kDeleteCandidate, command_length)) {
+    const char* index_str = line + command_length;
+    int index = atoi(index_str);
+    if (!rime->delete_candidate(session_id, index)) {
+      fprintf(stderr, "failed to delete\n");
+    }
+    return true;
+  }
   return false;
 }
 
@@ -184,6 +207,14 @@ void on_message(void* context_object,
   }
 }
 
+RimeSessionId ensure_session(RimeApi* rime) {
+  RimeSessionId id = rime->create_session();
+  if (!id) {
+    fprintf(stderr, "Error creating rime session.\n");
+  }
+  return id;
+}
+
 int main(int argc, char* argv[]) {
   unsigned int codepage = SetConsoleOutputCodePage();
   RimeApi* rime = rime_get_api();
@@ -202,13 +233,7 @@ reload:
     rime->join_maintenance_thread();
   fprintf(stderr, "ready.\n");
 
-  RimeSessionId session_id = rime->create_session();
-  if (!session_id) {
-    fprintf(stderr, "Error creating rime session.\n");
-    SetConsoleOutputCodePage(codepage);
-    return 1;
-  }
-
+  RimeSessionId session_id = 0;
   const int kMaxLength = 99;
   char line[kMaxLength + 1] = {0};
   while (fgets(line, kMaxLength, stdin) != NULL) {
@@ -217,6 +242,11 @@ reload:
         *p = '\0';
         break;
       }
+    }
+    if (!rime->find_session(session_id) &&
+        !(session_id = ensure_session(rime))) {
+      SetConsoleOutputCodePage(codepage);
+      return 1;
     }
     if (!strcmp(line, "exit"))
       break;
